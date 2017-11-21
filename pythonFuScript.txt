@@ -1,0 +1,89 @@
+#gimp 2.8.18
+#converts the animated green screen gif into a black and white series of png files with transparency replacing the green
+#how to use: open up all the gif files that you want to convert into gimp
+#open pythonfu, menu in upper left corner click on - filters ->pythonfu
+#copy paste this in there
+#note: make sure at least two corners are the shade of green that is the green screen shade
+#note: you will find the images in “<gimp home directory>/animatedImages/<gif image name>/1.png - 45.png
+
+import os
+
+#scroll through each gif that is open and export all gifs formatted and saved into pngs
+for img in gimp.image_list():
+    origImg = img
+    #img = gimp.image_list()[0]
+    drw = pdb.gimp_image_active_drawable(img)
+    img = pdb.plug_in_animationunoptimize(img, drw)    
+    drw = pdb.gimp_image_active_drawable(img)
+    
+    #set layer to background layer
+    img.active_layer = img.layers[-1]
+    try:
+        pdb.gimp_image_convert_rgb(img)
+    except:
+        print "rgb already done"
+    
+    #make all layers invisible but the background layer
+    for curLayer in img.layers:
+        curLayer.visible = False
+    
+    
+    img.layers[-1].visible = True
+    #get 4 corners of colors
+    width = pdb.gimp_image_width(img)
+    height = pdb.gimp_image_height(img)
+    topLeftColor = pdb.gimp_color_picker(img, drw, 1.0, 1.0, TRUE, TRUE, 1)
+    topRightColor = pdb.gimp_color_picker(img, drw, (width-1.0), 1.0, TRUE, TRUE, 1)
+    bottomLeftColor = pdb.gimp_color_picker(img, drw, 1.0, (height-1.0), TRUE, TRUE, 1)
+    bottomRightColor = pdb.gimp_color_picker(img, drw, (width-1.0), (height-1.0), TRUE, TRUE, 1)
+    cornerColorList = [topLeftColor, topRightColor, bottomLeftColor, bottomRightColor] 
+    
+    #find the most common color
+    def most_common(lst):
+        return max(set(lst), key=lst.count)
+    
+    
+    mostCommonColor = most_common(cornerColorList)
+    
+    
+    #so the problem here is the selection is still inverted, at the start of the for loop, do a select all
+    #alpha that color and fray the edges
+    i = len(img.layers)
+    for curLayer in img.layers:
+        i -= 1
+        if (i ==0):
+            img.remove_layer(curLayer)
+            break
+        img.active_layer = curLayer
+        drw = pdb.gimp_image_active_drawable(img)
+        pdb.gimp_selection_all(img)
+        pdb.gimp_layer_set_name(drw, i)
+        #using the line below will possibly make part of the animation disappear because it’s threshold is not controlled by me, use with caution 
+        threshold = 5;
+        for red in range(-threshold, threshold):
+          for green in range(-threshold, threshold):
+            for blue in range(-threshold, threshold):
+              curColor = mostCommonColor.copy()
+              curColor.red += red/255.0
+              curColor.green += green/255.0
+              curColor.blue += blue/255.0
+              if(curColor.red >=0.0 and curColor.red <=1.0 and curColor.green >=0.0 and curColor.green <=1.0 and curColor.blue >=0.0 and curColor.blue <=1.0):
+                pdb.plug_in_colortoalpha(img, drw, curColor)
+        #next line makes it black and white, remove for animations in color
+        pdb.gimp_hue_saturation(drw, 0, 0, 0, -100)
+        pdb.gimp_brightness_contrast(drw, 127.0, 127.0)
+        #fray the edge.  10% of the shortest dimension from the edge
+        pixlesToFray = min(img.width, img.height) * .10
+        pdb.gimp_image_select_rectangle(img, 2, pixlesToFray/2.0, pixlesToFray/2.0, img.width-pixlesToFray, img.height-pixlesToFray)
+        pdb.gimp_selection_invert(img)
+        pdb.gimp_selection_feather(img, pixlesToFray)
+        drw = pdb.gimp_image_active_drawable(img)
+        pdb.gimp_edit_clear(drw)
+    
+    
+    #export layers to individual files
+    filename = pdb.gimp_image_get_filename(origImg)
+    
+    folderName = os.path.splitext(os.path.basename(filename))[0]
+    pdb.plug_in_export_layers(img, ".png", os.path.join(gimp.directory, "animatedImages", folderName), False, False, False, True, 0, 0, 0, False, False, False, False, 0)
+
